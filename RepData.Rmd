@@ -1,0 +1,98 @@
+---
+title: "RepData"
+author: "Ekaterina"
+date: '14 December 2017'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Personal movement data analysis
+
+This Assignment reports answers on a list of questions on the data about personal movement using activity monitoring devices.
+
+## Loading and preprocessing the data
+* Firstly, we retrieve the data from the link provided.
+```{r}
+library(stringr)
+setwd('C:/Users/petrova/Desktop/temp/Represearch')
+download.file('https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip','Activity.zip')
+unzip('Activity.zip')
+actdata <- read.csv('activity.csv', sep = ',')
+```
+* Now a little bit of 'cleaning' is performed. We add additional column 'time' for subsequent grouping
+```{r}
+actdata$datatime <- as.POSIXct(strptime(paste(actdata$date, str_pad(actdata$interval,4,pad = "0")),"%Y-%m-%d %H%M"))
+actdata$time <- as.POSIXct(strptime(paste('1900-10-01', str_pad(actdata$interval,4,pad = "0")),"%Y-%m-%d %H%M"))
+head(actdata, 3)
+```
+
+## What is mean total number of steps taken per day
+* Let's see the histogram of the total number of steps taken each day
+```{r}
+library(data.table)
+actdata <- as.data.table(actdata)
+gractdata <- actdata[,list(steps = sum(steps)), by=list(date)]
+hist( gractdata$steps, xlab = 'Steps number', main = 'Average number of steps taken per day')
+```
+
+* And check the mean and median of the total number of steps taken per day
+```{r}
+mean(gractdata$steps, na.rm = TRUE)
+median(gractdata$steps, na.rm = TRUE)
+```
+
+## What is the average daily activity pattern?
+* Here is a plot of average number of steps taken, averaged across all days (y-axis)
+```{r}
+timedata <- actdata[,list(steps = mean(steps, na.rm = TRUE)), by=list(time)]
+plot(timedata$time, timedata$steps, type='l', xlab='Time of the day', ylab = 'Number of steps within 5 min period')
+```
+
+* Interval of the day which contains the maximum number of steps:
+```{r}
+format(timedata$time[timedata$steps == max(timedata$steps)], "%H:%M")
+```
+## Imputing missing values
+*  Total number of missing values in the dataset
+```{r}
+sum(is.na(actdata[, steps]))
+```
+* Strategy for filling in all of the missing values in the dataset
+We will use average result or this time of the day
+
+* Create a new dataset that is equal to the original dataset but with the missing data filled in
+```{r}
+actdataclear <- merge(actdata, timedata, all.x=TRUE, by = c('time'))
+actdataclear$steps <- ifelse(is.na(actdataclear$steps.x), actdataclear$steps.y, actdataclear$steps.x)
+actdataclear$steps.x <- NULL
+actdataclear$steps.y <- NULL
+gractdataClear <- actdataclear[,list(steps = sum(steps)), by=list(date)]
+```
+*  Histogram of the total number of steps taken each day:
+```{r}
+hist( gractdataClear$steps, xlab = 'Steps number', main = 'Average number of steps taken per day')
+```
+
+* Mean and median total number of steps taken per day:
+```{r}
+mean(gractdataClear$steps)
+median(gractdataClear$steps)
+```
+* Note that the mean and median are happened to be the same as missing data was probably spread evenly between all times of the day
+
+## Are there differences in activity patterns between weekdays and weekends?
+* Further we create a new factor variable in the dataset with two levels – “weekday” and “weekend” indicating whether a given date is a weekday or weekend day
+```{r}
+Sys.setlocale("LC_ALL","English")
+actdataclear$weekdays <- as.factor(ifelse(weekdays(as.Date(actdataclear$date)) %in% c("Friday", "Saturday"), 'weekend', 'weekday'))
+```
+* Finally, let's have a look at a plot of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days
+```{r}
+timedataClear <- actdataclear[,list(steps = mean(steps, na.rm = TRUE)), by=list(time, weekdays)]
+library(ggplot2)
+library(scales)
+ggplot(data=timedataClear, aes(x=time, y=steps)) + geom_line() + facet_grid(weekdays ~ .) + xlab('Interval') + ylab('Number of steps')+ scale_x_datetime(labels = date_format('%H:%M'))
+```
